@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Online Planningstool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h2 {
+      margin-bottom: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background: #f2f2f2;
+    }
+    .button {
+      padding: 10px 20px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2>Online Planningstool</h2>
+  <p>Gebruik dit formulier om een afspraak in te plannen voor massages.</p>
+  <button id="addSlot" class="button">Voeg extra slot toe</button>
+
+  <table id="planningTable">
+    <thead>
+      <tr>
+        <th>Naam</th>
+        <th>Starttijd</th>
+        <th>Massage Duur (min)</th>
+        <th>Eindtijd</th>
+        <th>Aftekenen</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Rijen worden hier dynamisch toegevoegd -->
+    </tbody>
+  </table>
+
+  <script>
+    // Functie om een nieuw slot toe te voegen
+    function addSlot() {
+      const tbody = document.getElementById('planningTable').getElementsByTagName('tbody')[0];
+      const tr = document.createElement('tr');
+
+      // Kolom: Naam van de te masseren persoon
+      const nameTd = document.createElement('td');
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = 'Naam';
+      nameTd.appendChild(nameInput);
+      tr.appendChild(nameTd);
+
+      // Kolom: Zelf in te vullen starttijd
+      const startTd = document.createElement('td');
+      const startInput = document.createElement('input');
+      startInput.type = 'time';
+      startTd.appendChild(startInput);
+      tr.appendChild(startTd);
+
+      // Kolom: Massage duur (keuze uit 15, 20 of 30 minuten)
+      const durationTd = document.createElement('td');
+      const durationSelect = document.createElement('select');
+      const durations = [15, 20, 30];
+      durations.forEach(function(duration) {
+          const option = document.createElement('option');
+          option.value = duration;
+          option.textContent = duration;
+          durationSelect.appendChild(option);
+      });
+      durationTd.appendChild(durationSelect);
+      tr.appendChild(durationTd);
+
+      // Kolom: Eindtijd (wordt automatisch berekend)
+      const endTd = document.createElement('td');
+      const endInput = document.createElement('input');
+      endInput.type = 'time';
+      endInput.readOnly = true;
+      endTd.appendChild(endInput);
+      tr.appendChild(endTd);
+
+      // Kolom: Aftekenen (checkbox)
+      const signTd = document.createElement('td');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      signTd.appendChild(checkbox);
+      tr.appendChild(signTd);
+
+      // Functie om de eindtijd te berekenen op basis van starttijd en massage duur
+      function calculateEndTime() {
+        const startTime = startInput.value;
+        const duration = parseInt(durationSelect.value, 10);
+        if(startTime) {
+          const [hours, minutes] = startTime.split(':').map(Number);
+          let startDate = new Date();
+          startDate.setHours(hours);
+          startDate.setMinutes(minutes);
+          startDate.setSeconds(0);
+          
+          // Voeg de geselecteerde duur toe
+          startDate.setMinutes(startDate.getMinutes() + duration);
+          
+          let endHours = startDate.getHours().toString().padStart(2, '0');
+          let endMinutes = startDate.getMinutes().toString().padStart(2, '0');
+          endInput.value = endHours + ':' + endMinutes;
+        } else {
+          endInput.value = '';
+        }
+      }
+      
+      // Eventlisteners om de eindtijd te herberekenen bij wijzigingen
+      startInput.addEventListener('change', calculateEndTime);
+      durationSelect.addEventListener('change', calculateEndTime);
+
+      tbody.appendChild(tr);
+    }
+
+    // Voeg bij het laden van de pagina een initiële slot toe
+    window.addEventListener('DOMContentLoaded', function() {
+      addSlot();
+    });
+
+    // Voeg een nieuw slot toe bij klik op de knop
+    document.getElementById('addSlot').addEventListener('click', addSlot);
+  </script>
+</body>
+</html>
