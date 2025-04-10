@@ -7,10 +7,44 @@
   <style>
     body {
       font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    /* Header met logo en branding in paarstint */
+    #branding {
+      background-color: #6a0dad; /* Paarse kleur (aanpassen indien nodig) */
+      color: #ffffff;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #branding img {
+      height: 60px;
+      margin-right: 20px;
+    }
+    #header-fields {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #header-fields label {
+      margin-right: 15px;
+      margin-bottom: 10px;
+    }
+    #header-fields input,
+    #header-fields select {
+      padding: 5px;
+      margin-left: 5px;
+      border: none;
+      border-radius: 3px;
+    }
+    /* Algemene styling voor de rest */
+    h2 {
       margin: 20px;
     }
-    h2 {
-      margin-bottom: 10px;
+    .container {
+      padding: 20px;
     }
     table {
       width: 100%;
@@ -27,116 +61,226 @@
     }
     .button {
       padding: 10px 20px;
+      margin-right: 10px;
       margin-top: 10px;
       cursor: pointer;
+    }
+    .time-input {
+      width: 70px;
     }
   </style>
 </head>
 <body>
-  <h2>Online Planningstool</h2>
-  <p>Gebruik dit formulier om een afspraak in te plannen voor massages.</p>
-  <button id="addSlot" class="button">Voeg extra slot toe</button>
+  <!-- Branding header met Massage.nl-logo en invulvelden -->
+  <header id="branding">
+    <img src="massage-nl-logo.png" alt="Massage.nl Logo">
+    <div id="header-fields">
+      <label>
+        Klantnaam:
+        <input type="text" id="klantnaam" placeholder="Voer klantnaam in">
+      </label>
+      <label>
+        Masseur:
+        <input type="text" id="masseur" placeholder="Voer masseur in">
+      </label>
+      <label>
+        Datum:
+        <input type="date" id="datum">
+      </label>
+      <label>
+        Starttijd:
+        <input type="time" id="globalStartTime">
+      </label>
+      <label>
+        Massage Duur:
+        <select id="defaultDuration">
+          <option value="15">15 minuten</option>
+          <option value="20">20 minuten</option>
+          <option value="30">30 minuten</option>
+        </select>
+      </label>
+    </div>
+  </header>
 
-  <table id="planningTable">
-    <thead>
-      <tr>
-        <th>Naam</th>
-        <th>Starttijd</th>
-        <th>Massage Duur (min)</th>
-        <th>Eindtijd</th>
-        <th>Aftekenen</th>
-      </tr>
-    </thead>
-    <tbody>
-      <!-- Rijen worden hier dynamisch toegevoegd -->
-    </tbody>
-  </table>
+  <div class="container">
+    <!-- Knoppen om slots toe te voegen -->
+    <div>
+      <button id="addMassageSlot" class="button">Voeg massage slot toe</button>
+      <button id="addPauzeSlot" class="button">Voeg pauze toe</button>
+    </div>
+
+    <!-- Planningstabel -->
+    <table id="planningTable">
+      <thead>
+        <tr>
+          <th>Naam</th>
+          <th>Tijdslot</th>
+          <th>Handtekening</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Dynamisch toegevoegde rijen komen hier -->
+      </tbody>
+    </table>
+  </div>
 
   <script>
-    // Functie om een nieuw slot toe te voegen
-    function addSlot() {
-      const tbody = document.getElementById('planningTable').getElementsByTagName('tbody')[0];
-      const tr = document.createElement('tr');
+    // Bereken de eindtijd op basis van een starttijd en duur (in minuten)
+    function calculateEndTime(startTime, duration) {
+      if (!startTime) return '';
+      const [h, m] = startTime.split(':').map(Number);
+      let date = new Date();
+      date.setHours(h, m, 0, 0);
+      date.setMinutes(date.getMinutes() + duration);
+      let endH = date.getHours().toString().padStart(2, '0');
+      let endM = date.getMinutes().toString().padStart(2, '0');
+      return endH + ':' + endM;
+    }
 
-      // Kolom: Naam van de te masseren persoon
-      const nameTd = document.createElement('td');
-      const nameInput = document.createElement('input');
+    // Herbereken alle slots, zodat ieder slot start op de eindtijd van het vorige slot.
+    function recalcAllSlots() {
+      let globalStart = document.getElementById('globalStartTime').value;
+      if (!globalStart) return; // Stop als er geen globale starttijd is.
+      let defaultDuration = parseInt(document.getElementById('defaultDuration').value, 10);
+
+      let currentTime = globalStart;
+      let rows = document.getElementById('planningTable').querySelectorAll('tbody tr');
+      rows.forEach(function(row) {
+        let timeCell = row.cells[1]; // Tijdslotkolom
+        let timeInputs = timeCell.querySelectorAll('input[type="time"]');
+        if (timeInputs.length < 2) return;
+        let startInput = timeInputs[0];
+        let endInput = timeInputs[1];
+
+        // Stel de starttijd in op de huidige ketenstart
+        startInput.value = currentTime;
+
+        // Kies de duur: voor massage-slot is dat de globale default, voor pauze-slot de gekozen waarde
+        let duration = defaultDuration;
+        if (row.dataset.slotType === "pauze") {
+          let select = timeCell.querySelector('select');
+          if (select) {
+            duration = parseInt(select.value, 10);
+          }
+        }
+        let computedEnd = calculateEndTime(currentTime, duration);
+        endInput.value = computedEnd;
+
+        // Gebruik de eindtijd als starttijd voor het volgende slot
+        currentTime = computedEnd;
+      });
+    }
+
+    // Voeg een massage slot toe
+    function addMassageSlot() {
+      const tbody = document.getElementById('planningTable').querySelector('tbody');
+      const tr = document.createElement('tr');
+      tr.dataset.slotType = "massage";
+
+      // Naam kolom
+      let nameTd = document.createElement('td');
+      let nameInput = document.createElement('input');
       nameInput.type = 'text';
       nameInput.placeholder = 'Naam';
       nameTd.appendChild(nameInput);
       tr.appendChild(nameTd);
 
-      // Kolom: Zelf in te vullen starttijd
-      const startTd = document.createElement('td');
-      const startInput = document.createElement('input');
+      // Tijdslot kolom: bevat starttijd en eindtijd
+      let timeTd = document.createElement('td');
+      let startInput = document.createElement('input');
       startInput.type = 'time';
-      startTd.appendChild(startInput);
-      tr.appendChild(startTd);
+      startInput.className = 'time-input';
+      startInput.readOnly = true;
 
-      // Kolom: Massage duur (keuze uit 15, 20 of 30 minuten)
-      const durationTd = document.createElement('td');
-      const durationSelect = document.createElement('select');
-      const durations = [15, 20, 30];
-      durations.forEach(function(duration) {
-          const option = document.createElement('option');
-          option.value = duration;
-          option.textContent = duration;
-          durationSelect.appendChild(option);
-      });
-      durationTd.appendChild(durationSelect);
-      tr.appendChild(durationTd);
+      let separator = document.createTextNode(' - ');
 
-      // Kolom: Eindtijd (wordt automatisch berekend)
-      const endTd = document.createElement('td');
-      const endInput = document.createElement('input');
+      let endInput = document.createElement('input');
       endInput.type = 'time';
+      endInput.className = 'time-input';
       endInput.readOnly = true;
-      endTd.appendChild(endInput);
-      tr.appendChild(endTd);
 
-      // Kolom: Aftekenen (checkbox)
-      const signTd = document.createElement('td');
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      signTd.appendChild(checkbox);
+      timeTd.appendChild(startInput);
+      timeTd.appendChild(separator);
+      timeTd.appendChild(endInput);
+      tr.appendChild(timeTd);
+
+      // Handtekening kolom (checkbox)
+      let signTd = document.createElement('td');
+      let signCheckbox = document.createElement('input');
+      signCheckbox.type = 'checkbox';
+      signTd.appendChild(signCheckbox);
       tr.appendChild(signTd);
 
-      // Functie om de eindtijd te berekenen op basis van starttijd en massage duur
-      function calculateEndTime() {
-        const startTime = startInput.value;
-        const duration = parseInt(durationSelect.value, 10);
-        if(startTime) {
-          const [hours, minutes] = startTime.split(':').map(Number);
-          let startDate = new Date();
-          startDate.setHours(hours);
-          startDate.setMinutes(minutes);
-          startDate.setSeconds(0);
-          
-          // Voeg de geselecteerde duur toe
-          startDate.setMinutes(startDate.getMinutes() + duration);
-          
-          let endHours = startDate.getHours().toString().padStart(2, '0');
-          let endMinutes = startDate.getMinutes().toString().padStart(2, '0');
-          endInput.value = endHours + ':' + endMinutes;
-        } else {
-          endInput.value = '';
-        }
-      }
-      
-      // Eventlisteners om de eindtijd te herberekenen bij wijzigingen
-      startInput.addEventListener('change', calculateEndTime);
-      durationSelect.addEventListener('change', calculateEndTime);
-
       tbody.appendChild(tr);
+      recalcAllSlots();
     }
 
-    // Voeg bij het laden van de pagina een initiële slot toe
-    window.addEventListener('DOMContentLoaded', function() {
-      addSlot();
-    });
+    // Voeg een pauze slot toe
+    function addPauzeSlot() {
+      const tbody = document.getElementById('planningTable').querySelector('tbody');
+      const tr = document.createElement('tr');
+      tr.dataset.slotType = "pauze";
 
-    // Voeg een nieuw slot toe bij klik op de knop
-    document.getElementById('addSlot').addEventListener('click', addSlot);
+      // Label kolom: "Pauze"
+      let labelTd = document.createElement('td');
+      labelTd.textContent = 'Pauze';
+      tr.appendChild(labelTd);
+
+      // Tijdslot kolom voor pauze
+      let timeTd = document.createElement('td');
+      let startInput = document.createElement('input');
+      startInput.type = 'time';
+      startInput.className = 'time-input';
+      startInput.readOnly = true;
+
+      let sep = document.createTextNode(' - ');
+
+      let endInput = document.createElement('input');
+      endInput.type = 'time';
+      endInput.className = 'time-input';
+      endInput.readOnly = true;
+
+      timeTd.appendChild(startInput);
+      timeTd.appendChild(sep);
+      timeTd.appendChild(endInput);
+      timeTd.appendChild(document.createElement('br'));
+
+      // Dropdown voor het selecteren van de pauze duur
+      let durationLabel = document.createElement('label');
+      durationLabel.textContent = 'Pauze duur: ';
+      durationLabel.style.marginRight = '5px';
+      timeTd.appendChild(durationLabel);
+
+      let pauseDurationSelect = document.createElement('select');
+      const pauseOptions = [15, 20, 30, 40];
+      pauseOptions.forEach(function(val) {
+        let option = document.createElement('option');
+        option.value = val;
+        option.textContent = val + ' min';
+        pauseDurationSelect.appendChild(option);
+      });
+      pauseDurationSelect.addEventListener('change', recalcAllSlots);
+      timeTd.appendChild(pauseDurationSelect);
+      tr.appendChild(timeTd);
+
+      // Lege kolom voor handtekening
+      let signTd = document.createElement('td');
+      tr.appendChild(signTd);
+
+      tbody.appendChild(tr);
+      recalcAllSlots();
+    }
+
+    // Koppel knoppen en header-veld wijzigingen
+    document.getElementById('addMassageSlot').addEventListener('click', addMassageSlot);
+    document.getElementById('addPauzeSlot').addEventListener('click', addPauzeSlot);
+    document.getElementById('globalStartTime').addEventListener('change', recalcAllSlots);
+    document.getElementById('defaultDuration').addEventListener('change', recalcAllSlots);
+
+    // Bij het laden, voeg één massage slot toe
+    window.addEventListener('DOMContentLoaded', function() {
+      addMassageSlot();
+    });
   </script>
 </body>
 </html>
