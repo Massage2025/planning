@@ -12,7 +12,7 @@
       margin: 0;
       padding: 0;
     }
-    /* Header: geen achtergrondkleur, wel logo en algemene velden */
+    /* Header: geen achtergrondkleur maar met onderstreping */
     #branding {
       padding: 20px;
       display: flex;
@@ -40,18 +40,28 @@
       border: 1px solid #ccc;
       border-radius: 3px;
     }
-    /* Container voor rest van de pagina */
+    /* Container voor de planningstool */
     .container {
       padding: 20px;
     }
-    /* Tabel: de kop heeft een paarse achtergrond, en de pauze-rij krijgt een lichte paarse tint */
+    /* Knoppen boven de planningstabel */
+    #mainButtons {
+      margin-bottom: 10px;
+    }
+    .button {
+      padding: 10px 20px;
+      margin-right: 10px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    /* Tabel styling: extra kolom "Nr" is toegevoegd */
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 20px;
     }
     thead th {
-      background-color: #6a0dad;
+      background-color: #6a0dad; /* Paarse achtergrond voor de kop */
       color: #ffffff;
       padding: 10px;
       border: 1px solid #ccc;
@@ -65,12 +75,6 @@
     /* Pauze-rij krijgt een lichte paarse achtergrond */
     tr[data-slot-type="pauze"] {
       background-color: #e0ccff;
-    }
-    .button {
-      padding: 10px 20px;
-      margin-right: 10px;
-      margin-top: 10px;
-      cursor: pointer;
     }
     .time-input {
       width: 70px;
@@ -88,4 +92,293 @@
       </label>
       <label>
         Masseur:
-        <input type="text" id="masseur" placeholder="
+        <input type="text" id="masseur" placeholder="Voer masseur in">
+      </label>
+      <label>
+        Datum:
+        <input type="date" id="datum">
+      </label>
+      <label>
+        Starttijd:
+        <input type="time" id="globalStartTime">
+      </label>
+      <label>
+        Massage Duur:
+        <select id="defaultDuration">
+          <option value="15">15 minuten</option>
+          <option value="20">20 minuten</option>
+          <option value="30">30 minuten</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Knoppen voor PDF-download én extra sloten toevoegen -->
+    <div id="mainButtons">
+      <button id="downloadPdf" class="button">Download als PDF</button>
+      <button id="addExtraMassage" class="button">Voeg extra massageslot toe</button>
+      <button id="addExtraPauze" class="button">Voeg extra pauzeslot toe</button>
+    </div>
+
+    <!-- Planningstabel met extra kolom "Nr" -->
+    <table id="planningTable">
+      <thead>
+        <tr>
+          <th style="width:50px;">Nr</th>
+          <th>Naam</th>
+          <th>Tijdslot</th>
+          <th>Handtekening</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Slots worden automatisch gegenereerd -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // Globale variabele voor drag-and-drop (voor versleepbare pauzes)
+    let draggedRow = null;
+
+    // Drag & Drop functies
+    function handleDragStart(e) {
+      draggedRow = this;
+      e.dataTransfer.effectAllowed = 'move';
+    }
+    function handleDragOver(e) {
+      if (e.preventDefault) { e.preventDefault(); }
+      e.dataTransfer.dropEffect = 'move';
+      return false;
+    }
+    function handleDrop(e) {
+      if (e.stopPropagation) { e.stopPropagation(); }
+      if (draggedRow && draggedRow !== this) {
+        this.parentNode.insertBefore(draggedRow, this);
+        recalcAllSlots();
+      }
+      return false;
+    }
+
+    // Bereken de eindtijd op basis van een starttijd en een duur (in minuten)
+    function calculateEndTime(startTime, duration) {
+      if (!startTime) return '';
+      const parts = startTime.split(':').map(Number);
+      const h = parts[0], m = parts[1];
+      let date = new Date();
+      date.setHours(h, m, 0, 0);
+      date.setMinutes(date.getMinutes() + duration);
+      let endH = date.getHours().toString().padStart(2, '0');
+      let endM = date.getMinutes().toString().padStart(2, '0');
+      return endH + ':' + endM;
+    }
+
+    // Herbereken de tijdsloten op basis van de huidige volgorde van de rijen
+    function recalcAllSlots() {
+      let globalStart = document.getElementById('globalStartTime').value;
+      if (!globalStart) return;
+      let defaultDuration = parseInt(document.getElementById('defaultDuration').value, 10);
+      let currentTime = globalStart;
+      // De "Tijdslot" kolom is nu de derde kolom (index 2) vanwege de extra nummerkolom
+      let rows = document.getElementById('planningTable').querySelectorAll('tbody tr');
+      rows.forEach(function(row) {
+        let timeCell = row.cells[2];
+        let inputs = timeCell.querySelectorAll('input[type="time"]');
+        if (inputs.length < 2) return;
+        let startInput = inputs[0];
+        let endInput = inputs[1];
+        startInput.value = currentTime;
+        let duration = defaultDuration;
+        if (row.dataset.slotType === "pauze") {
+          let select = timeCell.querySelector('select');
+          if (select) { duration = parseInt(select.value, 10); }
+        }
+        let computedEnd = calculateEndTime(currentTime, duration);
+        endInput.value = computedEnd;
+        currentTime = computedEnd;
+      });
+      updateRowNumbers();
+    }
+
+    // Update de nummering in de eerste kolom voor massageslots
+    function updateRowNumbers() {
+      let rows = document.getElementById('planningTable').querySelectorAll('tbody tr');
+      let count = 1;
+      rows.forEach(function(row) {
+        if (row.dataset.slotType === "massage") {
+          row.cells[0].textContent = count;
+          count++;
+        } else {
+          row.cells[0].textContent = "";
+        }
+      });
+    }
+
+    // Functie om een massageslot toe te voegen (niet-versleepbaar)
+    function addMassageSlot() {
+      const tbody = document.getElementById('planningTable').querySelector('tbody');
+      const tr = document.createElement('tr');
+      tr.dataset.slotType = "massage";
+
+      // Kolom 1: Nummer (lege cel; wordt later bijgewerkt)
+      let numTd = document.createElement('td');
+      tr.appendChild(numTd);
+
+      // Kolom 2: Naam
+      let nameTd = document.createElement('td');
+      let nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = 'Naam';
+      nameTd.appendChild(nameInput);
+      tr.appendChild(nameTd);
+
+      // Kolom 3: Tijdslot (start - eind)
+      let timeTd = document.createElement('td');
+      let startInput = document.createElement('input');
+      startInput.type = 'time';
+      startInput.className = 'time-input';
+      startInput.readOnly = true;
+      let separator = document.createTextNode(' - ');
+      let endInput = document.createElement('input');
+      endInput.type = 'time';
+      endInput.className = 'time-input';
+      endInput.readOnly = true;
+      timeTd.appendChild(startInput);
+      timeTd.appendChild(separator);
+      timeTd.appendChild(endInput);
+      tr.appendChild(timeTd);
+
+      // Kolom 4: Handtekening (leeg laten)
+      let signTd = document.createElement('td');
+      tr.appendChild(signTd);
+
+      // Zorg dat deze rij drop events ontvangt
+      tr.addEventListener('dragover', handleDragOver);
+      tr.addEventListener('drop', handleDrop);
+
+      tbody.appendChild(tr);
+    }
+
+    // Functie om een pauzeslot toe te voegen (dit slot is versleepbaar)
+    function addPauzeSlot() {
+      const tbody = document.getElementById('planningTable').querySelector('tbody');
+      const tr = document.createElement('tr');
+      tr.dataset.slotType = "pauze";
+      tr.setAttribute("draggable", "true");
+      tr.addEventListener('dragstart', handleDragStart);
+      tr.addEventListener('dragover', handleDragOver);
+      tr.addEventListener('drop', handleDrop);
+
+      // Kolom 1: Nummer (lege cel)
+      let numTd = document.createElement('td');
+      tr.appendChild(numTd);
+
+      // Kolom 2: Label "Pauze"
+      let labelTd = document.createElement('td');
+      labelTd.textContent = 'Pauze';
+      tr.appendChild(labelTd);
+
+      // Kolom 3: Tijdslot en pauzeduur
+      let timeTd = document.createElement('td');
+      let startInput = document.createElement('input');
+      startInput.type = 'time';
+      startInput.className = 'time-input';
+      startInput.readOnly = true;
+      let sep = document.createTextNode(' - ');
+      let endInput = document.createElement('input');
+      endInput.type = 'time';
+      endInput.className = 'time-input';
+      endInput.readOnly = true;
+      timeTd.appendChild(startInput);
+      timeTd.appendChild(sep);
+      timeTd.appendChild(endInput);
+      timeTd.appendChild(document.createElement('br'));
+      let durationLabel = document.createElement('label');
+      durationLabel.textContent = 'Pauze duur: ';
+      durationLabel.style.marginRight = '5px';
+      timeTd.appendChild(durationLabel);
+      let pauseSelect = document.createElement('select');
+      const pauseOptions = [15, 20, 30, 40];
+      pauseOptions.forEach(function(val) {
+        let option = document.createElement('option');
+        option.value = val;
+        option.textContent = val + ' min';
+        pauseSelect.appendChild(option);
+      });
+      pauseSelect.value = "20";
+      pauseSelect.addEventListener('change', recalcAllSlots);
+      timeTd.appendChild(pauseSelect);
+      tr.appendChild(timeTd);
+
+      // Kolom 4: Handtekening (leeg laten)
+      let signTd = document.createElement('td');
+      tr.appendChild(signTd);
+
+      tbody.appendChild(tr);
+    }
+
+    // Initialiseer de planning: 5 massageslots, 1 pauzeslot, en dan nog 5 massageslots
+    function initSlots() {
+      const tbody = document.getElementById('planningTable').querySelector('tbody');
+      tbody.innerHTML = ''; // Maak de tabel leeg
+      for (let i = 0; i < 5; i++) {
+        addMassageSlot();
+      }
+      addPauzeSlot();
+      for (let i = 0; i < 5; i++) {
+        addMassageSlot();
+      }
+      recalcAllSlots();
+    }
+
+    // PDF-download functionaliteit met vervanging van invoervelden door statische tekst
+    document.getElementById('downloadPdf').addEventListener('click', function() {
+      // Maak een nieuwe container voor de PDF-inhoud
+      var pdfContent = document.createElement('div');
+      // Voeg de gekloonde header en tabel toe; let op: hier kopiëren we alleen de relevante delen (zonder de knoppen)
+      var headerClone = document.getElementById('branding').cloneNode(true);
+      var tableClone = document.getElementById('planningTable').cloneNode(true);
+      pdfContent.appendChild(headerClone);
+      pdfContent.appendChild(tableClone);
+      
+      // Vervang alle input- en selectelementen door span-elementen met hun getypte waarde
+      var fields = pdfContent.querySelectorAll('input, select');
+      fields.forEach(function(el) {
+        var span = document.createElement('span');
+        if (el.tagName.toLowerCase() === "select") {
+          span.textContent = el.options[el.selectedIndex] ? el.options[el.selectedIndex].textContent : "";
+        } else {
+          span.textContent = el.value;
+        }
+        el.parentNode.replaceChild(span, el);
+      });
+      
+      var opt = {
+        margin: 0.5,
+        filename: 'planning.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(pdfContent).save();
+    });
+
+    // Extra knoppen voor het toevoegen van rijen koppelen
+    document.getElementById('addExtraMassage').addEventListener('click', function() {
+      addMassageSlot();
+      recalcAllSlots();
+    });
+    document.getElementById('addExtraPauze').addEventListener('click', function() {
+      addPauzeSlot();
+      recalcAllSlots();
+    });
+
+    // Koppel header-veld wijzigingen zodat de tijdsloten herberekend worden
+    document.getElementById('globalStartTime').addEventListener('change', recalcAllSlots);
+    document.getElementById('defaultDuration').addEventListener('change', recalcAllSlots);
+
+    // Initialiseer de planning bij het laden van de pagina
+    window.addEventListener('DOMContentLoaded', initSlots);
+  </script>
+</body>
+</html>
